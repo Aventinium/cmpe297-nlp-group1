@@ -10,6 +10,7 @@ You run the chatbot locally from your terminal.
 -----------------------------
 A) Clone:
    git clone git@github.com:JCarter19999/cmpe297-nlp-group1.git
+   
    cd cmpe297-nlp-group1
 
 B) Create + activate an environment (Conda recommended on Windows):
