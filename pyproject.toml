@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cmpe297-chatbot"
+version = "0.1.0"
+description = "CMPE297 Group 1 - MVP Chatbot (Ollama)"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.setuptools]
+packages = ["rag_local"]
+
+[project.scripts]
+cmpe297-chat = "rag_local.chat:main"
