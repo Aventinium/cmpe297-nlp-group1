@@ -1,4 +1,4 @@
-from ollama_client import chat
+from .ollama_client import chat
 
 SYSTEM_PROMPT = "You are a helpful assistant."
 
