@@ -1,133 +1,150 @@
-CMPE297 Group 1 — Local CLI Chatbot (Ollama)
+1) What this project is
+-----------------------
+This repo provides:
+- An MVP command-line chatbot (baseline requirement: “working chatbot”)
+- A planned path to a Retrieval-Augmented Generation (RAG) system + evaluation (later sprints)
 
-This repository implements a minimal, fully local command-line chatbot
-using Ollama as the LLM backend.
+You run the chatbot locally from your terminal.
 
-This project satisfies the CMPE297 requirement of a working chatbot
-(no specialization or RAG required for the MVP).
-RAG-related modules exist in the codebase but are not required to run the chatbot.
+2) Quick Start (fastest path)
+-----------------------------
+A) Clone:
+   git clone git@github.com:JCarter19999/cmpe297-nlp-group1.git
+   cd cmpe297-nlp-group1
 
+B) Create + activate an environment (Conda recommended on Windows):
+   conda create -n cmpe297-chatbot python=3.10 -y
+   conda activate cmpe297-chatbot
 
-WHAT THIS PROJECT DOES
-- Runs a local chatbot in the terminal
-- Uses Ollama for inference (no cloud APIs)
-- Supports multi-turn conversation
-- Packaged as a Python wheel for clean installation
+C) Install:
+   python -m pip install --upgrade pip
+   pip install -e .
 
+D) Install Ollama + pull a model (one-time):
+   - Install Ollama (must be running)
+   - Pull the model:
+       ollama pull llama3.1:8b
 
-PREREQUISITES (REQUIRED BEFORE RUNNING)
+E) Run:
+   cmpe297-chat
 
-1) Ollama must be installed and running
-Install Ollama using the official installer for your OS.
+3) Step-by-step (detailed)
+--------------------------
 
-Verify Ollama is running:
-    curl http://localhost:11434
+3.1 Clone the repository
+------------------------
+1) Open a terminal (PowerShell on Windows).
+2) Go to a folder where you keep projects:
+   Example (Windows):
+     cd C:\\Users\\YOURNAME\\Desktop
+   Example (Mac/Linux):
+     cd ~/Desktop
 
-If this fails, start Ollama and try again.
+3) Clone the repo:
+   git clone git@github.com:JCarter19999/cmpe297-nlp-group1.git
 
+4) Enter the repo:
+   cd cmpe297-nlp-group1
 
-2) Pull the model used by this project
-This project defaults to llama3.1:8b.
+3.2 Create a Python environment
+-------------------------------
 
-Pull it once:
-    ollama pull llama3.1:8b
+Option A: Conda (recommended on Windows)
+1) Create:
+   conda create -n cmpe297-chatbot python=3.10 -y
+2) Activate:
+   conda activate cmpe297-chatbot
 
-Verify:
+Option B: venv (works everywhere)
+1) Create:
+   python -m venv .venv
+2) Activate:
+
+   Windows (PowerShell):
+     .\\.venv\\Scripts\\Activate.ps1
+
+   Windows (cmd):
+     .\\.venv\\Scripts\\activate.bat
+
+   Mac/Linux:
+     source .venv/bin/activate
+
+3.3 Install the project
+-----------------------
+From the repo root (the folder that contains rag_local/):
+
+1) Upgrade pip:
+   python -m pip install --upgrade pip
+
+2) Install the project in editable mode:
+   pip install -e .
+
+Editable mode means you can edit code and re-run without reinstalling.
+
+3.4 Install and run Ollama (one-time)
+-------------------------------------
+This chatbot uses Ollama as the local model runner.
+
+1) Install Ollama (and ensure it is running).
+2) Pull the model:
+   ollama pull llama3.1:8b
+
+If your team chooses a different model later, update the README and/or config.
+
+3.5 Run the chatbot
+-------------------
+From the repo root:
+
+Option A (recommended):
+  cmpe297-chat
+
+Option B (debug / fallback):
+  python -m rag_local.chat
+
+How to use it:
+- Type a message and press Enter
+- To quit: type 'exit' or press Ctrl+C
+
+4) Installing RAG + Evaluation dependencies (later sprints)
+-----------------------------------------------------------
+For the baseline chatbot, you only need the default install (pip install -e .).
+
+When you start RAG work:
+  pip install -e ".[rag]"
+
+When you start evaluation work:
+  pip install -e ".[eval]"
+
+If you want everything:
+  pip install -e ".[rag,eval,dev]"
+
+5) Common issues (quick fixes)
+------------------------------
+
+Issue: “cmpe297-chat is not recognized”
+- Make sure your environment is activated
+- Make sure you ran:
+    pip install -e .
+- If still stuck, run:
+    python -m rag_local.chat
+
+Issue: “Ollama connection error” / “Ollama not running”
+- Start Ollama
+- Confirm the service is up:
     ollama list
-
-
-3) Python 3.10 or newer
-Verify Python version:
-    python --version
-
-
-QUICK START (RECOMMENDED PATH: WHEEL INSTALL)
-
-These steps assume a completely clean Python environment.
-
-
-1) Clone the repository
-    git clone <REPO_URL>
-    cd cmpe297-nlp-group1
-
-
-2) Create and activate a virtual environment
-
-Windows (PowerShell):
-    python -m venv .venv
-    .\.venv\Scripts\Activate.ps1
-
-macOS / Linux:
-    python -m venv .venv
-    source .venv/bin/activate
-
-Upgrade pip:
-    python -m pip install --upgrade pip
-
-
-3) Install build tools and build the wheel
-    python -m pip install --upgrade build
-    python -m build
-
-This creates a wheel file in the dist/ directory.
-
-
-4) Install the wheel
-    python -m pip install dist/*.whl
-
-
-5) Run the chatbot
-After installation, a CLI command is available:
-
+- Then re-run:
     cmpe297-chat
 
-Type messages to chat.
-Exit with exit, quit, or Ctrl+C.
+Issue: “ModuleNotFoundError …”
+- Make sure you are running from the repo root (same folder as rag_local/)
+- Make sure the file is committed and pushed if teammates are cloning it:
+    git status
+    git add <missing_file>
+    git commit -m "Add missing file"
+    git push
+- Reinstall editable:
+    pip install -e .
 
-
-ALTERNATE RUN (DEVELOPMENT MODE, NO WHEEL)
-
-If you prefer to run directly from source:
-
-    cd rag_local
-    python chat.py
-
-
-TROUBLESHOOTING
-
-Ollama connection error
-- Ensure Ollama is running
-- Confirm it is listening on http://localhost:11434
-- Try:
-    ollama list
-
-
-Model not found
-Pull the model:
-    ollama pull llama3.1:8b
-
-
-cmpe297-chat command not found
-- Ensure the virtual environment is active
-- Verify installation:
-    pip show cmpe297-chatbot
-
-Reinstall the wheel if needed:
-    python -m pip install --force-reinstall dist/*.whl
-
-
-PROJECT STRUCTURE (MVP RELEVANT)
-
-rag_local/
-    chat.py            - CLI chatbot entrypoint
-    ollama_client.py   - Minimal Ollama API wrapper
-    __init__.py
-
-Additional modules exist for future RAG functionality but are not required
-for the chatbot MVP.
-
-
-NOTES
-- No cloud services are used
-- No API keys are required
-- All inference runs locally via Ollama
+Issue: “ImportError: cannot import name …”
+- Usually means the function name in an import does not match the actual function in the file.
+- Open the referenced file and confirm the function exists.
