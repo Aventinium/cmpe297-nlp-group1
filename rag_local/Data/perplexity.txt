@@ -1,0 +1,1 @@
+Perplexity which is the exponential of the cross-entropy loss, means how many choices, on average, the model feels it has.
