@@ -13,26 +13,50 @@ Optional:
     Start character index within the original text (inclusive).
 - end: int
     End character index within the original text (exclusive).
+- doc_id: str
+    Identifier of the parent document (propagated from input).
+- source: str
+    Source of the parent document (e.g., filename, URL).
+- metadata: dict
+    Optional metadata propagated from the parent document.
 
 Example chunk object
 --------------------
 chunk = {
-    "chunk_id": "a1b2c3d4e5f6g7h8",
+    "chunk_id": "doc123::chunk_0",
     "text": "This is the chunk text ...",
     "start": 0,
-    "end": 500
+    "end": 500,
+    "doc_id": "doc123",
+    "source": "example.pdf",
+    "metadata": {
+        "author": "Jane Doe",
+        "category": "lecture_notes"
+    }
 }
 
 Public API
 ----------
-- chunk_text(text: str, *, chunk_size: int = 800, overlap: int = 200,
-            doc_id: str | None = None, include_spans: bool = True) -> list[Chunk]
+- chunk_text(
+      text: str,
+      *,
+      chunk_size: int = 800,
+      overlap: int = 200,
+      doc_id: str | None = None,
+      source: str | None = None,
+      metadata: dict | None = None,
+      include_spans: bool = True
+  ) -> list[Chunk]
 
 Notes
 -----
 - No NLP libraries required (pure Python).
-- This implementation chunks by character count (baseline).
+- Baseline implementation uses fixed-size, character-based chunking.
 - You can later add token-based chunking, sentence boundaries, etc., while keeping the schema stable.
+- Chunk order is deterministic across runs when inputs are unchanged.
+- If doc_id is not provided, a deterministic hash-based chunk_id is used.
+- The output schema is designed to remain stable as future enhancements
+  (token-based chunking, sentence boundaries, etc.) are added.
 """
 
 from __future__ import annotations
@@ -40,11 +64,9 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, TypedDict
 import hashlib
 
-
 # -----------------------------
 # Chunk schema (contract)
 # -----------------------------
-
 class Chunk(TypedDict, total=False):
     """
     Standard chunk schema for chunking output.
@@ -67,7 +89,6 @@ class Chunk(TypedDict, total=False):
     doc_id: str
     source: str
     metadata: Dict[str, Any]
-
 
 # -----------------------------
 # Public entrypoint
@@ -189,7 +210,6 @@ def _make_chunk(
     """
     Normalize chunk output into the Chunk schema and generate a stable chunk_id.
     """
-    # chunk_id = make_chunk_id(doc_id=doc_id, start=start, end=end, chunk_text=chunk_text)
     chunk_id = make_chunk_id(doc_id=doc_id,index=index,start=start,end=end,chunk_text=chunk_text)
     chunk: Chunk = {
         "chunk_id": chunk_id,
@@ -207,8 +227,6 @@ def _make_chunk(
         chunk["metadata"] = dict(metadata) # shallow copy to avoid accidental mutation across chunks
     return chunk
 
-
-# def make_chunk_id(*, doc_id: Optional[str], start: int, end: int, chunk_text: str) -> str:
 def make_chunk_id(*, doc_id: Optional[str], index: int, start: int, end: int, chunk_text: str) -> str:
     """
     Create a deterministic chunk identifier.
