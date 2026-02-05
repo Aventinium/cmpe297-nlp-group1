@@ -230,3 +230,53 @@ def normalize_document(*, source: str, text: str, meta: Optional[Dict[str, Any]]
     if meta:
         doc["meta"] = meta
     return doc
+
+# Define a function for loading .txt files
+def load_txt_files(data_dir: str) -> List[Document]:
+    """
+    Load all .txt files from the specified directory and return a list of document objects.
+
+    Args:
+        data_dir (str): The path to the directory containing the .txt files.
+
+    Returns:
+        List[Document]: A list of document objects, where each document corresponds to a single .txt file.
+
+    Notes:
+        This function assumes that each .txt file produces exactly one document.
+        It also checks for empty lines and skips them with a warning message.
+    """
+    root = Path(data_dir).expanduser().resolve()
+    if not root.exists() or not root.is_dir():
+        raise FileNotFoundError(f"Data directory not found: {root}")
+
+    # Get list of all .txt files in the data directory, sorted by filename
+    txt_files = sorted([f for f in os.listdir(root) if f.endswith(".txt")])
+
+    docs: List[Document] = []
+
+    for txt_file in txt_files:
+        file_path = root / txt_file
+
+        # Read and process all lines of the .txt file
+        with open(file_path, "r", encoding="utf-8") as file:
+            text = []
+            for line in file:
+                if line.strip() != "":
+                    text.append(line)
+
+        # Check if the file is not empty and skip it with a warning otherwise
+        if len(text) > 0:
+            source = str(file_path.relative_to(DEFAULT_DATA_DIR))
+            meta = {}  # No metadata for this loader, but you can add more here if needed
+
+            doc = normalize_document(
+                source=source,
+                text="\n".join(text),
+                meta=meta,
+            )
+            docs.append(doc)
+        else:
+            print(f"Warning: Skipping empty file {txt_file}")
+
+    return docs
