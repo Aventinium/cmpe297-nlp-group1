@@ -1,0 +1,2 @@
+Two reasons in the pretraining phase that an LLM hallucinates is statistical inevitability and objective mismatch.
+One reason in the post-training phase that an LLM hallucinates is the preference signals favor answering over abstaining.

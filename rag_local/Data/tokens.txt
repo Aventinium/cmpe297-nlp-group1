@@ -1,0 +1,1 @@
+Skip-grams calculate the outside words based on the center word while continuous bag of words predicts the center word based on the (bag of) surrounding context words.
