@@ -171,7 +171,7 @@ def chunk_text(
             doc_id=doc_id,
             source=source,
             metadata=metadata,
-            index=i
+            index=i,
             include_spans=include_spans,
         )
         chunks.append(chunk)
