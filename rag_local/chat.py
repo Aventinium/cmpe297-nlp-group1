@@ -1,79 +1,50 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Dict, List, Literal, Optional
 import inspect
 
-from .ollama_client import chat
 from rag_local.config import get_config
+from rag_local.ollama_client import chat
+from rag_local.embedders import make_embedder
+from rag_local.rag import build_index, load_index, save_index, answer_query
 
 
 Role = Literal["system", "user", "assistant"]
-Message = Dict[str, str]  # {"role": "...", "content": "..."}
+Message = Dict[str, str]
 
 
 def _append_and_trim(history: List[Message], msg: Message, max_messages: int) -> None:
-    """
-    Append a message (user/assistant) and trim history deterministically.
-
-    Notes:
-    - `history` should NOT include the system message.
-    - `max_messages` counts user+assistant messages only.
-    """
     history.append(msg)
-
     if max_messages <= 0:
         history.clear()
         return
-
     if len(history) > max_messages:
         del history[:-max_messages]
 
 
 def _build_messages(system_prompt: str, history: List[Message]) -> List[Message]:
-    """
-    Build the final message list sent to the model:
-    [system] + history
-    """
     return [{"role": "system", "content": system_prompt}] + list(history)
 
 
 def _call_chat(messages: List[Message], model: Optional[str] = None) -> str:
-    """
-    Call ollama_client.chat with a best-effort signature match.
-
-    Supports common signatures:
-    - chat(messages)
-    - chat(messages, model="...")
-    - chat(model="...", messages=messages)
-
-    Returns:
-    - reply string (never None)
-    """
     try:
         sig = inspect.signature(chat)
         params = sig.parameters
 
-        # Case A: chat(messages) only
         if len(params) == 1:
             reply = chat(messages)
-
-        # Case B: chat(messages, model=...)
         elif "model" in params:
             reply = chat(messages, model=model) if model else chat(messages)
-
-        # Case C: chat(model=..., messages=...)
         elif "messages" in params:
             kwargs = {"messages": messages}
             if model and "model" in params:
                 kwargs["model"] = model
             reply = chat(**kwargs)
-
         else:
-            # Fallback: try simplest call
             reply = chat(messages)
 
     except Exception:
-        # If introspection fails for any reason, fallback to simplest call
         reply = chat(messages)
 
     return reply if reply else "(No response.)"
@@ -82,8 +53,34 @@ def _call_chat(messages: List[Message], model: Optional[str] = None) -> str:
 def main() -> None:
     cfg = get_config()
 
-    # Keep only user/assistant turns here; system prompt is prepended each call.
     history: List[Message] = []
+    rag_enabled = bool(getattr(cfg, "rag_enabled", True))
+
+    # RAG objects (lazily created)
+    index = None
+
+    if rag_enabled:
+        embed_backend = getattr(cfg, "embed_backend", "ollama")
+        embed_model = getattr(cfg, "embed_model", "nomic-embed-text")
+        ollama_host = getattr(cfg, "ollama_host", "http://localhost:11434")
+
+        embedder = make_embedder(backend=embed_backend, model=embed_model, host=ollama_host)
+
+        index_path = Path(getattr(cfg, "index_path", "rag_local/Data/.index/local_index.json")).resolve()
+        index_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if index_path.exists():
+            index = load_index(index_path, embedder=embedder)
+            print(f"[RAG] Loaded index: {index_path}")
+        else:
+            index, stats = build_index(
+                data_dir=Path(getattr(cfg, "data_dir", "rag_local/Data")),
+                embedder=embedder,
+                chunk_size=int(getattr(cfg, "chunk_size", 800)),
+                overlap=int(getattr(cfg, "overlap", 200)),
+            )
+            save_index(index, index_path)
+            print(f"[RAG] Built index: docs={stats.doc_count} chunks={stats.chunk_count} -> {index_path}")
 
     print("Chatbot ready. Type 'exit' to quit.")
 
@@ -97,27 +94,34 @@ def main() -> None:
                 print("Bye.")
                 return
 
-            # Add user message to history
+            # baseline history tracking (still useful even with RAG for follow-ups)
             _append_and_trim(
                 history,
                 {"role": "user", "content": user},
-                max_messages=getattr(cfg, "max_history_turns", 12),
+                max_messages=int(getattr(cfg, "max_history_turns", 12)),
             )
 
-            # Build messages for model call
-            messages = _build_messages(
-                system_prompt=getattr(cfg, "system_prompt", "You are a helpful assistant."),
-                history=history,
-            )
+            if rag_enabled and index is not None:
+                out = answer_query(
+                    query=user,
+                    index=index,
+                    model=getattr(cfg, "model", "llama3.1:8b"),
+                    system_prompt=getattr(cfg, "system_prompt", "You are a helpful assistant."),
+                    top_k=int(getattr(cfg, "top_k", 5)),
+                    max_context_chars=int(getattr(cfg, "max_context_chars", 6000)),
+                )
+                reply = out["answer"]
+            else:
+                messages = _build_messages(
+                    system_prompt=getattr(cfg, "system_prompt", "You are a helpful assistant."),
+                    history=history,
+                )
+                reply = _call_chat(messages, model=getattr(cfg, "model", None))
 
-            # Call model
-            reply = _call_chat(messages, model=getattr(cfg, "model", None))
-
-            # Add assistant reply to history
             _append_and_trim(
                 history,
                 {"role": "assistant", "content": reply},
-                max_messages=getattr(cfg, "max_history_turns", 12),
+                max_messages=int(getattr(cfg, "max_history_turns", 12)),
             )
 
             print(f"\nBot: {reply}\n")

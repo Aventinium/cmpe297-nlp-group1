@@ -1,0 +1,13 @@
+{
+  "rag_enabled": true,
+  "top_k": 5,
+  "chunk_size": 800,
+  "overlap": 200,
+  "max_context_chars": 6000,
+  "embed_backend": "ollama",
+  "embed_model": "nomic-embed-text",
+  "ollama_host": "http://localhost:11434",
+  "data_dir": "rag_local/Data",
+  "index_path": "rag_local/Data/.index/local_index.json",
+  "model": "llama3.1:8b"
+}
