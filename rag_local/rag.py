@@ -49,7 +49,7 @@ def build_index(
             overlap=overlap,
             doc_id=doc_id,
             source=source,
-            metadata=d.get("meta", None),
+            metadata=d.get("metadata", d.get("meta", None)),
             include_spans=True,
         )
         all_chunks.extend(chunks)
