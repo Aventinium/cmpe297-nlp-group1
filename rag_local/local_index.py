@@ -60,8 +60,15 @@ from __future__ import annotations
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Sequence, Tuple, TypedDict, Union
+import numpy as np
 import json
 import math
+
+# Optional fast NN backend
+try:
+    from sklearn.neighbors import NearestNeighbors  # type: ignore
+except Exception:
+    NearestNeighbors = None  # type: ignore
 
 # -----------------------------
 # Types / Contracts
@@ -150,11 +157,13 @@ class SimpleLocalIndex:
     embedder: Embedder
     chunks: List[Chunk]
     vectors: List[List[float]]
+    nn: Any  # sklearn NearestNeighbors instance or None
 
     def __init__(self, *, embedder: Embedder) -> None:
         self.embedder = embedder
         self.chunks = []
         self.vectors = []
+        self.nn = None
 
     def add(self, chunks: Sequence[Chunk]) -> None:
         """
@@ -179,11 +188,16 @@ class SimpleLocalIndex:
         self.chunks.extend(list(chunks))
         self.vectors.extend(vecs)
 
+        # Rebuild NN structure for fast search (if available)
+        self._rebuild_nn()
+
     def search(self, query: str, top_k: int = 5) -> List[SearchResult]:
         """
-        Search the index using cosine similarity.
+        Search the index.
         Returns:
         - top_k SearchResult objects with score in descending order
+        Score definition:
+        - Cosine similarity in [~0, 1] for typical embedding spaces
         """
         if top_k <= 0:
             raise ValueError("top_k must be > 0")
@@ -192,8 +206,30 @@ class SimpleLocalIndex:
           
         # Same embedder used for both chunks and queries
         qvec = self.embedder.embed_query(query)
+        k = min(top_k, len(self.chunks))
+      
+        # Fast path: sklearn NN (cosine distance)
+        if self.nn is not None:
+            Xq = np.array([qvec], dtype=np.float32)
+            distances, indices = self.nn.kneighbors(Xq, n_neighbors=min(top_k, len(self.chunks)))
+            results: List[SearchResult] = []
+            for idx, dist in zip(indices[0].tolist(), distances[0].tolist()):
+                c = self.chunks[idx]
+                score = 1.0 - float(dist) # cosine distance = 1 - cosine similarity
+                r: SearchResult = {
+                    "chunk_id": c.get("chunk_id", ""),
+                    "text": c.get("text", ""),
+                    "score": score,
+                }
+                # carry optional metadata through
+                for k in ("start", "end", "doc_id", "source", "metadata", "embedding"):
+                    if k in c:
+                        r[k] = c[k]  # type: ignore[index]
+                results.append(r)
+            return results
+          
+        # Fallback: deterministic linear scan (cosine similarity)
         scored: List[Tuple[int, float]] = []
-
         for i, vec in enumerate(self.vectors):
             score = cosine_similarity(qvec, vec)
             scored.append((i, score))
@@ -209,18 +245,11 @@ class SimpleLocalIndex:
                 "text": c.get("text", ""),
                 "score": float(score),
             }
-            if "start" in c:
-                r["start"] = int(c["start"])
-            if "end" in c:
-                r["end"] = int(c["end"])
-            if "doc_id" in c:
-                r["doc_id"] = c["doc_id"]
-            if "source" in c:
-                r["source"] = c["source"]
-            if "metadata" in c:
-                r["metadata"] = c["metadata"]
+          # Carry optional metadata through
+            for k in ("start", "end", "doc_id", "source", "metadata", "embedding"):
+              if k in c:
+                r[k] = c[k]  # type: ignore[index] 
             results.append(r)
-
         return results
 
     def save(self, path: Union[str, Path]) -> None:
@@ -238,7 +267,7 @@ class SimpleLocalIndex:
             "vectors": self.vectors,
             "embedder": {  # Addition to payload to include embedder if we want to document the embedding method used
               "type": self.embedder.__class__.__name__,
-              "model_name": getattr(self.embedder, "model_name", None),
+              "model": getattr(self.embedder, "model", None),
               "normalize": getattr(self.embedder, "normalize", None),
               "vector_dim": (len(self.vectors[0]) if self.vectors else None),
             },
@@ -272,8 +301,38 @@ class SimpleLocalIndex:
         # Verify they match in length
         if len(idx.chunks) != len(idx.vectors):
             raise ValueError("Corrupt index: chunks and vectors length mismatch.")
-        return idx
 
+        # Make load() rebuild the NN index automatically
+        idx._rebuild_nn()
+        return idx
+      
+    # -----------------------------
+    # Internal helpers
+    # -----------------------------
+    def _rebuild_nn(self) -> None:
+        """
+        Build an internal nearest-neighbor structure for fast search.
+        Uses sklearn NearestNeighbors if available, otherwise falls back to None (and search will use the baseline linear scan).
+        """
+        if NearestNeighbors is None:
+            self.nn = None
+            return
+        if not self.vectors:
+            self.nn = None
+            return
+            
+        # Sanity: consistent dimensions
+        d0 = len(self.vectors[0])
+        if any(len(v) != d0 for v in self.vectors):
+            raise ValueError("Inconsistent vector dimensions in index.")
+            
+        X = np.array(self.vectors, dtype=np.float32)
+
+        # Since embeddings are L2-normalized, cosine similarity is well-behaved.
+        nn = NearestNeighbors(metric="cosine", algorithm="auto")
+        nn.fit(X)
+        self.nn = nn
+      
 # -----------------------------
 # Similarity (baseline)
 # -----------------------------
