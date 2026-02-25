@@ -65,6 +65,7 @@ def main() -> None:
         ollama_host = getattr(cfg, "ollama_host", "http://localhost:11434")
 
         embedder = make_embedder(backend=embed_backend, model=embed_model, host=ollama_host)
+        print("[EMBED]", embed_backend, embedder.__class__.__name__, getattr(embedder, "model", None))
 
         index_path = Path(getattr(cfg, "index_path", "rag_local/Data/.index/local_index.json")).resolve()
         index_path.parent.mkdir(parents=True, exist_ok=True)
@@ -81,7 +82,12 @@ def main() -> None:
             )
             save_index(index, index_path)
             print(f"[RAG] Built index: docs={stats.doc_count} chunks={stats.chunk_count} -> {index_path}")
-
+            if index is not None and getattr(index, "chunks", None):
+                c0 = index.chunks[0]
+                has_emb = "embedding" in c0
+                dim = len(c0["embedding"]) if has_emb else 0
+                print(f"[EMBED] stored_in_chunk={has_emb} dim={dim}")
+        
     print("Chatbot ready. Type 'exit' to quit.")
 
     while True:
