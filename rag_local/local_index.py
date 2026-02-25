@@ -118,34 +118,6 @@ class Embedder(Protocol):
     def embed_query(self, query: str) -> List[float]:
         ...
 
-class SentenceTransformerEmbedder:
-    """
-    SentenceTransformers-based embedder.
-    Requirements satisfied:
-    - Same embedding method for chunks and queries.
-    - Deterministic given same model + same inputs.
-    - Returns JSON-serializable List[List[float]] and List[float].
-    """
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2", *, normalize: bool = True) -> None:
-        try:
-            from sentence_transformers import SentenceTransformer  # type: ignore
-        except ImportError as e:
-            raise ImportError(
-              "sentence-transformers is not installed. Install with: pip install sentence-transformers"
-            ) from e
-        self.model_name = model_name
-        self.normalize = normalize
-        self._model = SentenceTransformer(model_name)
-
-    def embed_texts(self, texts: Sequence[str]) -> List[List[float]]:
-        vecs = self._model.encode(list(texts), normalize_embeddings=self.normalize,convert_to_numpy=True,show_progress_bar=False)
-        return vecs.tolist()
-
-    def embed_query(self, query: str) -> List[float]:
-        vec = self._model.encode(query,normalize_embeddings=self.normalize, convert_to_numpy=True,show_progress_bar=False)
-        return vec.tolist()
-
-
 # -----------------------------
 # Public Index Interface
 # -----------------------------
