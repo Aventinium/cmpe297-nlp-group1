@@ -156,6 +156,38 @@ class HashEmbedder:
         v = out[:needed]
         return _l2_normalize(v) if self.normalize else v
 
+@dataclass
+class SentenceTransformersEmbedder:
+    """
+    SentenceTransformers embedder (recommended semantic embeddings).
+
+    Notes:
+    - Uses a local transformer model (downloads from Hugging Face on first run).
+    - Import is inside __post_init__ to avoid hard dependency unless selected.
+    - Returns L2-normalized vectors by default for stable cosine similarity.
+    """
+
+    model: str = "all-MiniLM-L6-v2"
+    normalize: bool = True
+
+    def __post_init__(self) -> None:
+        try:
+            from sentence_transformers import SentenceTransformer  # type: ignore
+        except ImportError as e:
+            raise ImportError(
+                "sentence-transformers is not installed. Install with: pip install -e '.[rag]' "
+                "or pip install sentence-transformers"
+            ) from e
+
+        self._model = SentenceTransformer(self.model)
+
+    def embed_texts(self, texts: Sequence[str]) -> List[List[float]]:
+        vecs = self._model.encode(list(texts),normalize_embeddings=self.normalize,convert_to_numpy=True,show_progress_bar=False)
+        return vecs.tolist()
+
+    def embed_query(self, query: str) -> List[float]:
+        vec = self._model.encode(query,normalize_embeddings=self.normalize,convert_to_numpy=True,show_progress_bar=False)
+        return vec.tolist()
 
 def make_embedder(
     *,
@@ -170,10 +202,13 @@ def make_embedder(
     backend:
       - "ollama": OllamaEmbedder
       - "hash": HashEmbedder
+      - "sbert": SentenceTransformersEmbedder
     """
     b = (backend or "").strip().lower()
     if b == "ollama":
         return OllamaEmbedder(model=model or "nomic-embed-text", host=host, timeout_s=timeout_s)
     if b == "hash":
         return HashEmbedder()
-    raise ValueError(f"Unknown embedder backend: {backend!r}. Use 'ollama' or 'hash'.")
+    if b == "sbert":
+        return SentenceTransformersEmbedder(model=model or "all-MiniLM-L6-v2", normalize=True)
+    raise ValueError(f"Unknown embedder backend: {backend!r}. Use 'ollama', 'hash', or 'sbert'.")
