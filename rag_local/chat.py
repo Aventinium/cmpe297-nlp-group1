@@ -8,7 +8,8 @@ from rag_local.config import get_config
 from rag_local.ollama_client import chat
 from rag_local.embedders import make_embedder
 from rag_local.rag import build_index, load_index, save_index, answer_query
-
+# import os
+# os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3" # Suppresses TensorFlow spam
 
 Role = Literal["system", "user", "assistant"]
 Message = Dict[str, str]
@@ -65,6 +66,7 @@ def main() -> None:
         ollama_host = getattr(cfg, "ollama_host", "http://localhost:11434")
 
         embedder = make_embedder(backend=embed_backend, model=embed_model, host=ollama_host)
+        print("[EMBED]", embed_backend, embedder.__class__.__name__, getattr(embedder, "model", None))
 
         index_path = Path(getattr(cfg, "index_path", "rag_local/Data/.index/local_index.json")).resolve()
         index_path.parent.mkdir(parents=True, exist_ok=True)
@@ -81,7 +83,12 @@ def main() -> None:
             )
             save_index(index, index_path)
             print(f"[RAG] Built index: docs={stats.doc_count} chunks={stats.chunk_count} -> {index_path}")
-
+            
+        # ---- Verify embeddings stored ----
+        if index is not None and getattr(index, "chunks", None):
+            c0 = index.chunks[0]
+            print(f"[EMBED] stored_in_chunk={'embedding' in c0} "f"dim={len(c0.get('embedding', []))} "f"keys={list(c0.keys())}")
+        
     print("Chatbot ready. Type 'exit' to quit.")
 
     while True:
