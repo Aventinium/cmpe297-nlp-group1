@@ -8,7 +8,8 @@ from rag_local.config import get_config
 from rag_local.ollama_client import chat
 from rag_local.embedders import make_embedder
 from rag_local.rag import build_index, load_index, save_index, answer_query
-
+# import os
+# os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3" # Suppresses TensorFlow spam
 
 Role = Literal["system", "user", "assistant"]
 Message = Dict[str, str]
@@ -82,11 +83,11 @@ def main() -> None:
             )
             save_index(index, index_path)
             print(f"[RAG] Built index: docs={stats.doc_count} chunks={stats.chunk_count} -> {index_path}")
-            if index is not None and getattr(index, "chunks", None):
-                c0 = index.chunks[0]
-                has_emb = "embedding" in c0
-                dim = len(c0["embedding"]) if has_emb else 0
-                print(f"[EMBED] stored_in_chunk={has_emb} dim={dim}")
+            
+        # ---- Verify embeddings stored ----
+        if index is not None and getattr(index, "chunks", None):
+            c0 = index.chunks[0]
+            print(f"[EMBED] stored_in_chunk={'embedding' in c0} "f"dim={len(c0.get('embedding', []))} "f"keys={list(c0.keys())}")
         
     print("Chatbot ready. Type 'exit' to quit.")
 
