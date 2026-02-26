@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Dict, List, Literal
 
 from rag_local.config import get_config
-from rag_local.ollama_client import chat
 from rag_local.embedders import make_embedder
-from rag_local.rag import build_index, load_index, save_index, answer_query
-# import os
-# os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3" # Suppresses TensorFlow spam
+from rag_local.rag import build_index, load_index, save_index
+
+# IMPORTANT: use the shared core function (same as Streamlit)
+from rag_local.app_core import answer_turn
 
 Role = Literal["system", "user", "assistant"]
 Message = Dict[str, str]
@@ -28,8 +29,7 @@ def main() -> None:
     history: List[Message] = []
     rag_enabled = bool(getattr(cfg, "rag_enabled", True))
 
-    # RAG objects (lazily created)
-    index = None
+    index = None  # lazily created
 
     if rag_enabled:
         embed_backend = getattr(cfg, "embed_backend", "ollama")
@@ -47,19 +47,28 @@ def main() -> None:
             print(f"[RAG] Loaded index: {index_path}")
         else:
             index, stats = build_index(
-                data_dir=Path(getattr(cfg, "data_dir", "rag_local/Data")),
+                data_dir=Path(getattr(cfg, "data_dir", "rag_local/Data")).resolve(),
                 embedder=embedder,
                 chunk_size=int(getattr(cfg, "chunk_size", 800)),
                 overlap=int(getattr(cfg, "overlap", 200)),
             )
             save_index(index, index_path)
             print(f"[RAG] Built index: docs={stats.doc_count} chunks={stats.chunk_count} -> {index_path}")
-            
-        # ---- Verify embeddings stored ----
-        if index is not None and getattr(index, "chunks", None):
-            c0 = index.chunks[0]
-            print(f"[EMBED] stored_in_chunk={'embedding' in c0} "f"dim={len(c0.get('embedding', []))} "f"keys={list(c0.keys())}")
-        
+
+        # Verify embeddings stored (safe)
+        try:
+            if index is not None and getattr(index, "chunks", None):
+                c0 = index.chunks[0]
+                # c0 might be a dict; handle both dict-like and object-like
+                if isinstance(c0, dict):
+                    emb = c0.get("embedding", [])
+                    print(f"[EMBED] stored_in_chunk={'embedding' in c0} dim={len(emb)} keys={list(c0.keys())}")
+                else:
+                    emb = getattr(c0, "embedding", [])
+                    print(f"[EMBED] stored_in_chunk={emb is not None} dim={len(emb) if emb else 0}")
+        except Exception as e:
+            print(f"[EMBED] verify skipped: {e}")
+
     print("Chatbot ready. Type 'exit' to quit.")
 
     while True:
@@ -72,7 +81,6 @@ def main() -> None:
                 print("Bye.")
                 return
 
-            # baseline history tracking (still useful even with RAG for follow-ups)
             _append_and_trim(
                 history,
                 {"role": "user", "content": user},
