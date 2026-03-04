@@ -1,5 +1,7 @@
 {
   "rag_enabled": true,
+  "rag_eval_on_startup": true,
+  "rag_eval_n": 3,
   "top_k": 5,
   "chunk_size": 800,
   "overlap": 200,

@@ -5,6 +5,7 @@ from typing import Dict, List, Literal
 
 from rag_local.config import get_config
 from rag_local.embedders import make_embedder
+from rag_local.eval_rag import default_eval_items, format_eval_report, run_rag_eval
 from rag_local.rag import build_index, load_index, save_index
 
 # IMPORTANT: use the shared core function (same as Streamlit)
@@ -68,6 +69,16 @@ def main() -> None:
                     print(f"[EMBED] stored_in_chunk={emb is not None} dim={len(emb) if emb else 0}")
         except Exception as e:
             print(f"[EMBED] verify skipped: {e}")
+
+        # Optional startup eval (CLI only; no GUI wiring)
+        if bool(getattr(cfg, "rag_eval_on_startup", True)):
+            try:
+                n = int(getattr(cfg, "rag_eval_n", 3))
+                items = default_eval_items()[: max(0, n)]
+                eval_result = run_rag_eval(cfg=cfg, index=index, items=items)
+                print(format_eval_report(eval_result))
+            except Exception as e:
+                print(f"[EVAL] Startup eval skipped: {e}")
 
     print("Chatbot ready. Type 'exit' to quit.")
 
