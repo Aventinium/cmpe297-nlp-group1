@@ -42,6 +42,10 @@ class AppConfig:
     # Chat
     max_history_turns: int = 12
 
+    # CLI evaluation
+    rag_eval_on_startup: bool = True
+    rag_eval_n: int = 3
+
     # RAG
     rag_enabled: bool = False
     top_k: int = 5
@@ -72,12 +76,16 @@ def get_config(config_path: Optional[str | Path] = None) -> AppConfig:
     overrides.setdefault("rag_enabled", _env_bool("RAG_ENABLED", base.rag_enabled))
     overrides.setdefault("embed_backend", os.getenv("EMBED_BACKEND", base.embed_backend))
     overrides.setdefault("embed_model", os.getenv("EMBED_MODEL", base.embed_model))
+    overrides.setdefault("rag_eval_on_startup", _env_bool("RAG_EVAL_ON_STARTUP", base.rag_eval_on_startup))
+    overrides.setdefault("rag_eval_n", int(os.getenv("RAG_EVAL_N", str(base.rag_eval_n))))
 
     return AppConfig(
         ollama_host=str(overrides.get("ollama_host", base.ollama_host)),
         model=str(overrides.get("model", base.model)),
         system_prompt=str(overrides.get("system_prompt", base.system_prompt)),
         max_history_turns=int(overrides.get("max_history_turns", base.max_history_turns)),
+        rag_eval_on_startup=bool(overrides.get("rag_eval_on_startup", base.rag_eval_on_startup)),
+        rag_eval_n=int(overrides.get("rag_eval_n", base.rag_eval_n)),
         rag_enabled=bool(overrides.get("rag_enabled", base.rag_enabled)),
         top_k=int(overrides.get("top_k", base.top_k)),
         chunk_size=int(overrides.get("chunk_size", base.chunk_size)),

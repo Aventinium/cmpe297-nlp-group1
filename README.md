@@ -106,6 +106,15 @@ How to use it:
 - Type a message and press Enter
 - To quit: type 'exit' or press Ctrl+C
 
+CLI RAG evaluation:
+- When RAG is enabled, `cmpe297-chat` now runs a quick startup RAG eval and prints a small score table.
+- Configure with `rag_local/config.local.json`:
+  - `rag_eval_on_startup` (true/false)
+  - `rag_eval_n` (number of eval questions, default 3)
+- Env overrides:
+  - `RAG_EVAL_ON_STARTUP=true|false`
+  - `RAG_EVAL_N=<int>`
+
 4) Installing RAG + Evaluation dependencies (later sprints)
 -----------------------------------------------------------
 For the baseline chatbot, you only need the default install (pip install -e .).
