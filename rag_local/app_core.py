@@ -105,6 +105,35 @@ def init_index(cfg: Cfg, *, force_rebuild: bool = False) -> Tuple[Optional[Any],
     if index_path.exists() and not force_rebuild:
         index = load_index(index_path, embedder=embedder)
         meta["loaded"] = True
+
+        # Guard against embedder/index dimensionality mismatch
+        # (e.g., index built with sbert=384 but runtime embedder is ollama=768).
+        try:
+            index_dim = len(index.vectors[0]) if getattr(index, "vectors", None) else 0
+            probe = embedder.embed_query("dim check")
+            embed_dim = len(probe) if probe else 0
+            if index_dim > 0 and embed_dim > 0 and index_dim != embed_dim:
+                index, stats = build_index(
+                    data_dir=data_dir,
+                    embedder=embedder,
+                    chunk_size=cfg_int(cfg, "chunk_size", 800),
+                    overlap=cfg_int(cfg, "overlap", 200),
+                )
+                save_index(index, index_path)
+                meta.update(
+                    {
+                        "built": True,
+                        "loaded": False,
+                        "rebuilt_for_dim_mismatch": True,
+                        "old_vector_dim": int(index_dim),
+                        "new_vector_dim": int(embed_dim),
+                        "doc_count": int(getattr(stats, "doc_count", 0)),
+                        "chunk_count": int(getattr(stats, "chunk_count", 0)),
+                    }
+                )
+        except Exception:
+            # Keep behavior non-fatal; caller can still proceed and surface any runtime error.
+            pass
         return index, meta
 
     # Rebuild

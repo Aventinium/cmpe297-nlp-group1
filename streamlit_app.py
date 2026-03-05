@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 import streamlit as st
 
 from rag_local.app_core import answer_turn, cfg_with_overrides, init_index
+from rag_local.eval_rag import default_eval_items, run_rag_eval
 from rag_local.openalex_client import OpenAlexClient
 from rag_local.openalex_fetch import materialize_openalex_selected
 from rag_local.paper_rerank import rerank_by_cosine
@@ -36,6 +37,10 @@ def _init_state():
         st.session_state.index = None
     if "cfg" not in st.session_state:
         st.session_state.cfg = {}
+    if "eval_result" not in st.session_state:
+        st.session_state.eval_result = None
+    if "eval_error" not in st.session_state:
+        st.session_state.eval_error = ""
 
     # OpenAlex search state
     if "oa_ranked" not in st.session_state:
@@ -149,6 +154,11 @@ load_idx = colA.button("Load index", use_container_width=True)
 rebuild_idx = colB.button("Rebuild", use_container_width=True)
 clear_chat = st.sidebar.button("Clear chat", use_container_width=True)
 
+st.sidebar.markdown("---")
+st.sidebar.subheader("Evaluation")
+eval_n = st.sidebar.slider("Eval questions", 1, 10, 3, key="eval_n")
+run_eval_btn = st.sidebar.button("Run RAG eval", use_container_width=True)
+
 # Update cfg in session_state
 st.session_state.cfg = cfg_with_overrides(
     st.session_state.cfg,
@@ -217,6 +227,35 @@ if rebuild_idx:
 
     except Exception as e:
         st.sidebar.error(f"Rebuild failed: {e}")
+
+if run_eval_btn:
+    if not st.session_state.cfg.get("rag_enabled", True):
+        st.session_state.eval_result = None
+        st.session_state.eval_error = "RAG is disabled. Enable RAG to run evaluation."
+    else:
+        # Always refresh via init_index so backend can auto-fix dimension mismatch
+        # between stored vectors and current embedder.
+        try:
+            idx, _meta = init_index(st.session_state.cfg, force_rebuild=False)
+            st.session_state.index = idx
+        except Exception as e:
+            st.session_state.eval_result = None
+            st.session_state.eval_error = f"Index init failed: {e}"
+
+        if st.session_state.index is not None:
+            try:
+                with st.sidebar.spinner("Running RAG evaluation..."):
+                    items = default_eval_items()[: int(eval_n)]
+                    st.session_state.eval_result = run_rag_eval(
+                        cfg=st.session_state.cfg,
+                        index=st.session_state.index,
+                        items=items,
+                    )
+                    st.session_state.eval_error = ""
+                st.sidebar.success("Evaluation complete.")
+            except Exception as e:
+                st.session_state.eval_result = None
+                st.session_state.eval_error = f"Evaluation failed: {e}"
 
 
 # -----------------------------
@@ -356,6 +395,25 @@ if ranked_results:
 # -----------------------------
 st.title("Local RAG Chatbot")
 st.caption("Streamlit UI (thin layer) · Backend in rag_local/")
+
+eval_result = st.session_state.get("eval_result")
+eval_error = st.session_state.get("eval_error", "")
+if eval_error:
+    st.warning(eval_error)
+
+if eval_result:
+    st.subheader("RAG Evaluation")
+    summary = eval_result.get("summary", {})
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("Correctness", f"{float(summary.get('correctness_avg', 0.0)):.2f}")
+    m2.metric("Relevance", f"{float(summary.get('relevance_avg', 0.0)):.2f}")
+    m3.metric("Groundedness", f"{float(summary.get('groundedness_avg', 0.0)):.2f}")
+    m4.metric("Retrieval rel.", f"{float(summary.get('retrieval_relevance_avg', 0.0)):.2f}")
+    m5.metric("Latency (s)", f"{float(summary.get('latency_avg_s', 0.0)):.2f}")
+
+    rows = eval_result.get("rows", [])
+    if rows:
+        st.dataframe(rows, use_container_width=True, hide_index=True)
 
 # Try to load index on startup (non-fatal)
 if st.session_state.index is None:
