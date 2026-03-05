@@ -1,0 +1,17 @@
+{
+  "source": "openalex",
+  "openalex_id": "https://openalex.org/W2604799547",
+  "title": "Survey of the State of the Art in Natural Language Generation: Core tasks, applications and evaluation",
+  "year": 2018,
+  "landing_url": "https://doi.org/10.1613/jair.5477",
+  "pdf_url": "https://jair.org/index.php/jair/article/download/11173/26378",
+  "query": "State of the Art NLP Architecture",
+  "score": 0.5474575154420169,
+  "raw": {
+    "source": "openalex",
+    "openalex_id": "https://openalex.org/W2604799547",
+    "landing_url": "https://doi.org/10.1613/jair.5477",
+    "pdf_url": "https://jair.org/index.php/jair/article/download/11173/26378",
+    "score": 0.5474575154420169
+  }
+}

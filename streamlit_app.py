@@ -8,8 +8,7 @@ import streamlit as st
 from rag_local.app_core import answer_turn, cfg_with_overrides, init_index
 from rag_local.openalex_client import OpenAlexClient
 from rag_local.openalex_fetch import materialize_openalex_selected
-from rag_local.paper_rerank import rerank_by_cosine
-
+from rag_local.paper_rerank import rerank_hybrid
 
 st.set_page_config(page_title="Local RAG Chatbot", layout="wide")
 
@@ -230,9 +229,18 @@ oa_mailto = st.sidebar.text_input("mailto (recommended)", key="oa_mailto", value
 oa_limit = st.sidebar.slider("Candidates to fetch", 25, 200, 50, step=25, key="oa_limit")
 oa_show_top = st.sidebar.slider("Show top ranked", 5, 25, 10, key="oa_show_top")
 
+st.sidebar.markdown("###Experimental: Hybrid ranking weights")
+
+oa_w_cos = st.sidebar.slider("Cosine weight (alpha)",min_value=0.0, max_value=1.0, value=0.6, step=0.05,key="oa_w_cos")
+oa_w_bm25 = st.sidebar.slider("BM25 weight (beta)",min_value=0.0, max_value=1.0, value=0.4, step=0.05,key="oa_w_bm25")
+oa_w_llm = st.sidebar.slider("LLM relevance weight (delta)", min_value=0.0, max_value=1.0, value=0.2, step=0.05,key="oa_w_llm")
+
+
 c1, c2 = st.sidebar.columns(2)
 oa_search_btn = c1.button("Search", key="oa_search_btn", use_container_width=True)
 oa_fetch_btn = c2.button("Fetch selected", key="oa_fetch_btn", use_container_width=True)
+
+
 
 if oa_search_btn:
     if not oa_query.strip():
@@ -250,21 +258,22 @@ if oa_search_btn:
             candidates: List[Dict[str, Any]] = []
             for w in works:
                 candidates.append(
-                    {
-                        "id": w.id,
-                        "title": w.title,
-                        "abstract": w.abstract,
-                        "year": w.year,
-                        "url": w.url,
-                        "pdf_url": w.pdf_url,
-                        "raw": {
-                            "source": "openalex",
-                            "openalex_id": w.id,
-                            "landing_url": w.url,
+                        {
+                            "id": w.id,
+                            "title": w.title,
+                            "abstract": w.abstract,
+                            "year": w.year,
+                            "url": w.url,
                             "pdf_url": w.pdf_url,
-                        },
-                    }
-                )
+                            "raw": {
+                                "source": "openalex",
+                                "openalex_id": w.id,
+                                "landing_url": w.url,
+                                "pdf_url": w.pdf_url,
+                            },
+                        }
+                    )
+
             from rag_local.ollama_bootstrap import preflight_ollama_for_embeddings
 
             status = preflight_ollama_for_embeddings(
@@ -276,12 +285,16 @@ if oa_search_btn:
                 st.stop()
             else:
                 st.sidebar.caption(status.message)
-            with st.sidebar.spinner("Reranking (nomic-embed-text cosine)..."):
-                ranked = rerank_by_cosine(
+            with st.sidebar.spinner("Reranking..."):
+                ranked = rerank_hybrid(
                     query=oa_query.strip(),
                     candidates=candidates,
                     ollama_host=st.session_state.cfg.get("ollama_host", "http://localhost:11434"),
                     embed_model=st.session_state.cfg.get("embed_model", "nomic-embed-text"),
+                    alpha=st.session_state.oa_w_cos,
+                    beta=st.session_state.oa_w_bm25,
+                    gamma = 0,
+                    delta = st.session_state.oa_w_llm,           
                     id_key="id",
                     year_key="year",
                     url_key="url",
@@ -290,7 +303,7 @@ if oa_search_btn:
                     top_n=int(oa_show_top),
                 )
 
-            st.session_state.oa_ranked = ranked
+            st.session_state.oa_ranked = ranked 
             st.session_state.oa_selected = {}
             st.sidebar.success(f"Found {len(works)} OA candidates. Showing top {len(ranked)} reranked.")
 
@@ -299,7 +312,7 @@ if oa_search_btn:
 
 ranked_results = st.session_state.get("oa_ranked", [])
 if ranked_results:
-    st.sidebar.caption("Candidates (OA only), reranked by cosine similarity:")
+    st.sidebar.caption("Candidates (OA only), reranked by similarity metrics:")
 
     for r in ranked_results:
         key = f"oa_pick_{r.id}"

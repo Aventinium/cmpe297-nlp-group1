@@ -1,0 +1,17 @@
+{
+  "source": "openalex",
+  "openalex_id": "https://openalex.org/W2970641574",
+  "title": "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks",
+  "year": 2019,
+  "landing_url": "https://doi.org/10.18653/v1/d19-1410",
+  "pdf_url": "https://www.aclweb.org/anthology/D19-1410.pdf",
+  "query": "State of the Art NLP Architecture",
+  "score": 0.5735066506820399,
+  "raw": {
+    "source": "openalex",
+    "openalex_id": "https://openalex.org/W2970641574",
+    "landing_url": "https://doi.org/10.18653/v1/d19-1410",
+    "pdf_url": "https://www.aclweb.org/anthology/D19-1410.pdf",
+    "score": 0.5735066506820399
+  }
+}

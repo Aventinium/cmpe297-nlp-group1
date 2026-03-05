@@ -1,0 +1,17 @@
+{
+  "source": "openalex",
+  "openalex_id": "https://openalex.org/W4360980513",
+  "title": "Welcome to the Era of ChatGPT et al.",
+  "year": 2023,
+  "landing_url": "https://doi.org/10.1007/s12599-023-00795-x",
+  "pdf_url": "https://link.springer.com/content/pdf/10.1007/s12599-023-00795-x.pdf",
+  "query": "Transformer Infrastructure",
+  "score": 0.715211057751502,
+  "raw": {
+    "source": "openalex",
+    "openalex_id": "https://openalex.org/W4360980513",
+    "landing_url": "https://doi.org/10.1007/s12599-023-00795-x",
+    "pdf_url": "https://link.springer.com/content/pdf/10.1007/s12599-023-00795-x.pdf",
+    "score": 0.715211057751502
+  }
+}
