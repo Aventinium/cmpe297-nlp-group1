@@ -32,8 +32,12 @@ class AppConfig:
     # Ollama host
     ollama_host: str = "http://localhost:11434"
 
-    # LLM chat model
+    # Canonical chat model name
+    chat_model: str = "llama3.1:8b"
+
+    # Backward-compatible alias for older codepaths
     model: str = "llama3.1:8b"
+
     system_prompt: str = (
         "You are an NLP tutor. Explain concepts clearly, step-by-step, "
         "and ask brief clarifying questions when needed."
@@ -42,7 +46,7 @@ class AppConfig:
     # Chat
     max_history_turns: int = 12
 
-    # CLI evaluation
+    # CLI / GUI evaluation
     rag_eval_on_startup: bool = True
     rag_eval_n: int = 3
 
@@ -58,8 +62,8 @@ class AppConfig:
     index_path: str = "rag_local/Data/.index/local_index.json"
 
     # Embeddings
-    embed_backend: str = "ollama"          # "ollama" or "hash"
-    embed_model: str = "nomic-embed-text"  # used for Ollama embeddings
+    embed_backend: str = "ollama"
+    embed_model: str = "nomic-embed-text"
 
 
 def get_config(config_path: Optional[str | Path] = None) -> AppConfig:
@@ -70,9 +74,15 @@ def get_config(config_path: Optional[str | Path] = None) -> AppConfig:
     if cfg_file.exists():
         overrides.update(json.loads(cfg_file.read_text(encoding="utf-8")))
 
-    # Env overrides (CI-friendly)
+    # Normalize model naming from local config / env
+    env_model = os.getenv("RAG_MODEL", base.chat_model)
+    chat_model = str(overrides.get("chat_model", overrides.get("model", env_model)))
+    model = str(overrides.get("model", overrides.get("chat_model", chat_model)))
+
+    # Env overrides
     overrides.setdefault("ollama_host", os.getenv("OLLAMA_HOST", base.ollama_host))
-    overrides.setdefault("model", os.getenv("RAG_MODEL", base.model))
+    overrides.setdefault("chat_model", chat_model)
+    overrides.setdefault("model", model)
     overrides.setdefault("rag_enabled", _env_bool("RAG_ENABLED", base.rag_enabled))
     overrides.setdefault("embed_backend", os.getenv("EMBED_BACKEND", base.embed_backend))
     overrides.setdefault("embed_model", os.getenv("EMBED_MODEL", base.embed_model))
@@ -81,7 +91,8 @@ def get_config(config_path: Optional[str | Path] = None) -> AppConfig:
 
     return AppConfig(
         ollama_host=str(overrides.get("ollama_host", base.ollama_host)),
-        model=str(overrides.get("model", base.model)),
+        chat_model=str(overrides.get("chat_model", chat_model)),
+        model=str(overrides.get("model", model)),
         system_prompt=str(overrides.get("system_prompt", base.system_prompt)),
         max_history_turns=int(overrides.get("max_history_turns", base.max_history_turns)),
         rag_eval_on_startup=bool(overrides.get("rag_eval_on_startup", base.rag_eval_on_startup)),

@@ -17,6 +17,9 @@ from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, Tuple,
 from rag_local.embedders import make_embedder
 from rag_local.ollama_client import chat as ollama_chat
 from rag_local.rag import build_index, load_index, save_index
+from pathlib import Path
+import shutil
+from datetime import datetime
 
 Role = Literal["system", "user", "assistant"]
 Message = Dict[str, str]
@@ -51,6 +54,23 @@ def cfg_str(cfg: Cfg, key: str, default: str) -> str:
     return default if v is None else str(v)
 
 
+def cfg_model(cfg: Cfg, default: str = "llama3.1:8b") -> str:
+    """
+    Backward-compatible model lookup:
+    - Streamlit uses `chat_model`
+    - CLI config historically used `model`
+    """
+    chat_model = cfg_get(cfg, "chat_model", None)
+    if chat_model:
+        return str(chat_model)
+
+    model = cfg_get(cfg, "model", None)
+    if model:
+        return str(model)
+
+    return default
+
+
 # -----------------------------
 # Streamlit-friendly cfg merge
 # -----------------------------
@@ -63,6 +83,13 @@ def cfg_with_overrides(cfg: dict, **overrides) -> dict:
     for k, v in overrides.items():
         if v is not None:
             out[k] = v
+
+    # keep both names synchronized for compatibility
+    if "chat_model" in out and "model" not in out:
+        out["model"] = out["chat_model"]
+    if "model" in out and "chat_model" not in out:
+        out["chat_model"] = out["model"]
+
     return out
 
 
@@ -78,7 +105,22 @@ def init_embedder(cfg: Cfg):
     )
 
 
-def init_index(cfg: Cfg, *, force_rebuild: bool = False) -> Tuple[Optional[Any], Dict[str, Any]]:
+def get_index_chunk_count(index: Any) -> int:
+    try:
+        chunks = getattr(index, "chunks", None)
+        if chunks is None and isinstance(index, dict):
+            chunks = index.get("chunks", [])
+        return len(chunks or [])
+    except Exception:
+        return 0
+
+
+def init_index(
+    cfg: Cfg,
+    *,
+    force_rebuild: bool = False,
+    progress_callback=None,
+) -> Tuple[Optional[Any], Dict[str, Any]]:
     """Load (or build) the local JSON index.
 
     Returns (index, meta). If RAG is disabled, index is None.
@@ -89,8 +131,8 @@ def init_index(cfg: Cfg, *, force_rebuild: bool = False) -> Tuple[Optional[Any],
 
     embedder = init_embedder(cfg)
 
-    data_dir = Path(cfg_str(cfg, "data_dir", "rag_local/Data")).resolve()
-    index_path = Path(cfg_str(cfg, "index_path", "rag_local/Data/.index/local_index.json")).resolve()
+    data_dir = get_corpus_docs_dir(cfg)
+    index_path = get_corpus_index_path(cfg)
     index_path.parent.mkdir(parents=True, exist_ok=True)
 
     meta: Dict[str, Any] = {
@@ -103,8 +145,13 @@ def init_index(cfg: Cfg, *, force_rebuild: bool = False) -> Tuple[Optional[Any],
 
     # Load existing
     if index_path.exists() and not force_rebuild:
+        if progress_callback:
+            progress_callback(0.10, "Loading existing index...")
         index = load_index(index_path, embedder=embedder)
+        if progress_callback:
+            progress_callback(1.00, "Existing index loaded.")
         meta["loaded"] = True
+        meta["chunk_count"] = get_index_chunk_count(index)
         return index, meta
 
     # Rebuild
@@ -113,8 +160,14 @@ def init_index(cfg: Cfg, *, force_rebuild: bool = False) -> Tuple[Optional[Any],
         embedder=embedder,
         chunk_size=cfg_int(cfg, "chunk_size", 800),
         overlap=cfg_int(cfg, "overlap", 200),
+        progress_callback=progress_callback,
     )
+
+    if progress_callback:
+        progress_callback(0.99, "Saving index to disk...")
     save_index(index, index_path)
+    if progress_callback:
+        progress_callback(1.00, "Index saved.")
 
     meta.update(
         {
@@ -126,6 +179,50 @@ def init_index(cfg: Cfg, *, force_rebuild: bool = False) -> Tuple[Optional[Any],
     return index, meta
 
 
+def refresh_index(
+    cfg: Cfg,
+    *,
+    force_rebuild: bool = True,
+    progress_callback=None,
+) -> Tuple[Optional[Any], Dict[str, Any]]:
+    """
+    Thin wrapper used by the GUI when newly fetched documents need to become
+    immediately searchable.
+    """
+    return init_index(cfg, force_rebuild=force_rebuild, progress_callback=progress_callback)
+
+
+# -----------------------------
+# Evaluation helpers
+# -----------------------------
+def run_eval_from_cfg(
+    cfg: Cfg,
+    index: Any,
+    *,
+    n_items: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Lazy import to avoid circular dependency:
+      app_core -> eval_rag -> app_core
+    """
+    if index is None:
+        return {"rows": [], "summary": {}, "error": "Index is not loaded."}
+
+    from rag_local.eval_rag import default_eval_items, run_rag_eval
+
+    if n_items is None:
+        n_items = cfg_int(cfg, "rag_eval_n", 3)
+
+    items = default_eval_items()[: max(0, int(n_items))]
+    return run_rag_eval(cfg=cfg, index=index, items=items)
+
+def run_conversation_eval_from_messages(messages: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    GUI-focused eval: score the actual conversation already stored in session state.
+    Lazy import avoids circular dependency issues.
+    """
+    from rag_local.eval_rag import run_conversation_eval
+    return run_conversation_eval(messages)
 # -----------------------------
 # Chat helpers
 # -----------------------------
@@ -197,15 +294,13 @@ def _answer_with_rag(*, query: str, index: Any, cfg: Cfg) -> Tuple[str, List[Dic
         {"role": "user", "content": user_content},
     ]
 
-    # IMPORTANT: use Streamlit keys (chat_model + ollama_host)
     reply = ollama_chat(
         messages,
-        model=cfg_str(cfg, "chat_model", "llama3.1:8b"),
+        model=cfg_model(cfg),
         host=cfg_str(cfg, "ollama_host", "http://localhost:11434"),
     )
     reply_text = reply or "(No response.)"
 
-    # Sources formatted to match Streamlit UI expectation: uses `file`
     sources: List[Dict[str, Any]] = []
     for i, r in enumerate(results, start=1):
         snippet = (r.get("text") or "").strip()
@@ -217,7 +312,7 @@ def _answer_with_rag(*, query: str, index: Any, cfg: Cfg) -> Tuple[str, List[Dic
                 "source_id": f"S{i}",
                 "chunk_id": r.get("chunk_id", ""),
                 "score": float(r.get("score", 0.0)),
-                "file": r.get("source", ""),     # <-- Streamlit displays `file`
+                "file": r.get("source", ""),
                 "snippet": snippet,
             }
         )
@@ -253,7 +348,72 @@ def answer_turn(
 
     reply = ollama_chat(
         messages,
-        model=cfg_str(cfg, "chat_model", "llama3.1:8b"),
+        model=cfg_model(cfg),
         host=cfg_str(cfg, "ollama_host", "http://localhost:11434"),
     )
     return (reply or "(No response.)"), []
+
+def sanitize_corpus_id(corpus_id: str) -> str:
+    corpus_id = (corpus_id or "").strip().lower()
+    safe = []
+    for ch in corpus_id:
+        if ch.isalnum() or ch in {"-", "_"}:
+            safe.append(ch)
+        else:
+            safe.append("-")
+    out = "".join(safe).strip("-")
+    return out or "default"
+
+
+def default_corpus_id() -> str:
+    return "chat-" + datetime.now().strftime("%Y%m%d-%H%M%S")
+
+
+def get_corpus_root(cfg: Cfg) -> Path:
+    base_data_dir = Path(cfg_str(cfg, "data_dir", "rag_local/Data")).resolve()
+
+    # If corpus mode is disabled, preserve old behavior
+    use_corpus_mode = cfg_bool(cfg, "use_corpus_mode", True)
+    if not use_corpus_mode:
+        return base_data_dir.resolve()
+
+    corpus_id = sanitize_corpus_id(cfg_str(cfg, "corpus_id", "default"))
+    return (base_data_dir / "corpora" / corpus_id).resolve()
+
+
+def get_corpus_docs_dir(cfg: Cfg) -> Path:
+    root = get_corpus_root(cfg)
+    if cfg_bool(cfg, "use_corpus_mode", True):
+        return (root / "docs").resolve()
+    return root.resolve()
+
+
+def get_corpus_index_path(cfg: Cfg) -> Path:
+    if cfg_bool(cfg, "use_corpus_mode", True):
+        root = get_corpus_root(cfg)
+        return (root / ".index" / "local_index.json").resolve()
+
+    # fallback to legacy path
+    return Path(cfg_str(cfg, "index_path", "rag_local/Data/.index/local_index.json")).resolve()
+
+
+def delete_current_index(cfg: Cfg) -> bool:
+    index_path = get_corpus_index_path(cfg)
+    if index_path.exists():
+        index_path.unlink()
+        return True
+    return False
+
+
+def delete_current_corpus(cfg: Cfg) -> bool:
+    docs_dir = get_corpus_docs_dir(cfg)
+    corpus_root = get_corpus_root(cfg)
+
+    # corpus mode only
+    if not cfg_bool(cfg, "use_corpus_mode", True):
+        return False
+
+    if corpus_root.exists():
+        shutil.rmtree(corpus_root)
+        return True
+    return False
