@@ -51,6 +51,11 @@ dev = [
   "ruff>=0.5.0",
 ]
 
+# Streamlit UI (thin layer over rag_local backend)
+ui = [
+  "streamlit>=1.31.0",
+]
+
 [tool.setuptools]
 packages = ["rag_local"]
 
