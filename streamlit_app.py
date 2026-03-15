@@ -390,136 +390,135 @@ if run_eval_btn:
 st.sidebar.markdown("---")
 st.sidebar.subheader("Search")
 
-with st.sidebar.form("search_form", clear_on_submit=False):
-    search_mode = st.selectbox(
-        "Search Mode",
-        options=["Academic (OpenAlex)", "General Knowledge (Wikipedia)", "Hybrid"],
-        index=["Academic (OpenAlex)", "General Knowledge (Wikipedia)", "Hybrid"].index(
-            st.session_state.get("last_search_mode", "Academic (OpenAlex)")
-        ),
-        key="search_mode",
-    )
-    st.session_state.last_search_mode = search_mode
+search_mode = st.sidebar.selectbox(
+    "Search Mode",
+    options=["Academic (OpenAlex)", "General Knowledge (Wikipedia)", "Hybrid"],
+    index=["Academic (OpenAlex)", "General Knowledge (Wikipedia)", "Hybrid"].index(
+        st.session_state.get("last_search_mode", "Academic (OpenAlex)")
+    ),
+    key="search_mode",
+)
+st.session_state.last_search_mode = search_mode
 
-    search_query = st.text_input(
-        "Search query",
-        key="search_query",
-        value=st.session_state.get("search_query", ""),
-    )
+search_query = st.sidebar.text_input(
+    "Search query",
+    key="search_query",
+    value=st.session_state.get("search_query", ""),
+)
 
-    search_topic = st.text_input(
-        "Research topic",
-        key="search_topic",
-        value=st.session_state.get("search_topic", ""),
-    )
+search_topic = st.sidebar.text_input(
+    "Research topic",
+    key="search_topic",
+    value=st.session_state.get("search_topic", ""),
+)
 
-    search_research_question = st.text_area(
-        "Research question",
-        key="search_research_question",
-        value=st.session_state.get("search_research_question", ""),
-        height=90,
-        help="What exactly are you trying to learn, compare, explain, or solve?",
-    )
+search_research_question = st.sidebar.text_area(
+    "Research question",
+    key="search_research_question",
+    value=st.session_state.get("search_research_question", ""),
+    height=90,
+    help="What exactly are you trying to learn, compare, explain, or solve?",
+)
 
-    search_level = st.selectbox(
-        "Education / familiarity level",
-        options=["high_school", "undergraduate", "masters", "phd"],
-        index=1,
-        key="search_level",
-    )
+search_level = st.sidebar.selectbox(
+    "Education / familiarity level",
+    options=["high_school", "undergraduate", "masters", "phd"],
+    index=1,
+    key="search_level",
+)
 
-    oa_mailto = st.text_input(
-        "OpenAlex mailto (recommended)",
-        key="oa_mailto",
-        value=st.session_state.get("oa_mailto", ""),
-    )
+oa_mailto = st.sidebar.text_input(
+    "OpenAlex mailto (recommended)",
+    key="oa_mailto",
+    value=st.session_state.get("oa_mailto", ""),
+)
 
-    if search_mode == "Academic (OpenAlex)":
-        search_limit_default = 50
-    elif search_mode == "General Knowledge (Wikipedia)":
-        search_limit_default = 20
-    else:
-        search_limit_default = 30
+if search_mode == "Academic (OpenAlex)":
+    search_limit_default = 50
+elif search_mode == "General Knowledge (Wikipedia)":
+    search_limit_default = 20
+else:
+    search_limit_default = 30
 
-    search_limit = st.slider(
-        "Initial candidate pool",
-        10, 200, search_limit_default, step=5, key="search_limit"
-    )
+search_limit = st.sidebar.slider(
+    "Initial candidate pool",
+    10, 200, search_limit_default, step=5, key="search_limit"
+)
 
-    strategy_name = st.selectbox(
-        "Search strategy",
-        options=[
-            "Balanced",
-            "Academic Precision",
-            "Broad Overview",
-            "Beginner-Friendly",
-            "Research-Heavy",
-        ],
-        index=0,
-        key="strategy_name",
-        help="Recommended preset for layered reranking. Use Advanced controls only if you want manual tuning.",
-    )
+strategy_name = st.sidebar.selectbox(
+    "Search strategy",
+    options=[
+        "Balanced",
+        "Academic Precision",
+        "Broad Overview",
+        "Beginner-Friendly",
+        "Research-Heavy",
+    ],
+    index=0,
+    key="strategy_name",
+    help="Recommended preset for layered reranking. Use Advanced controls only if you want manual tuning.",
+)
 
-    advanced_override = st.checkbox(
-        "Advanced controls",
-        value=False,
-        key="advanced_override",
-        help="Enable manual reranking controls.",
-    )
+advanced_override = st.sidebar.checkbox(
+    "Advanced controls",
+    value=False,
+    key="advanced_override",
+    help="Enable manual reranking controls.",
+)
 
-    # Manual defaults
-    search_prefilter_k_manual = st.slider(
-        "Lexical prefilter keep",
-        5, 100, 25, step=5, key="search_prefilter_k_manual",
-        disabled=not advanced_override,
-    )
+# Manual defaults
+search_prefilter_k_manual = st.sidebar.slider(
+    "Lexical prefilter keep",
+    5, 100, 25, step=5, key="search_prefilter_k_manual",
+    disabled=not advanced_override,
+)
 
-    search_w_sem_manual = st.slider(
-        "Semantic weight",
-        min_value=0.0, max_value=1.0, value=0.50, step=0.05,
-        key="search_w_sem_manual",
-        disabled=not advanced_override,
-    )
-    search_w_bm25_manual = st.slider(
-        "BM25 weight",
-        min_value=0.0, max_value=1.0, value=0.20, step=0.05,
-        key="search_w_bm25_manual",
-        disabled=not advanced_override,
-    )
-    search_w_lex_manual = st.slider(
-        "Lexical intent weight",
-        min_value=0.0, max_value=1.0, value=0.15, step=0.05,
-        key="search_w_lex_manual",
-        disabled=not advanced_override,
-    )
-    search_w_llm_manual = st.slider(
-        "LLM judge weight",
-        min_value=0.0, max_value=1.0, value=0.10, step=0.05,
-        key="search_w_llm_manual",
-        disabled=not advanced_override,
-    )
-    search_w_audience_manual = st.slider(
-        "Audience-level weight",
-        min_value=0.0, max_value=1.0, value=0.05, step=0.05,
-        key="search_w_audience_manual",
-        disabled=not advanced_override,
-    )
+search_w_sem_manual = st.sidebar.slider(
+    "Semantic weight",
+    min_value=0.0, max_value=1.0, value=0.50, step=0.05,
+    key="search_w_sem_manual",
+    disabled=not advanced_override,
+)
+search_w_bm25_manual = st.sidebar.slider(
+    "BM25 weight",
+    min_value=0.0, max_value=1.0, value=0.20, step=0.05,
+    key="search_w_bm25_manual",
+    disabled=not advanced_override,
+)
+search_w_lex_manual = st.sidebar.slider(
+    "Lexical intent weight",
+    min_value=0.0, max_value=1.0, value=0.15, step=0.05,
+    key="search_w_lex_manual",
+    disabled=not advanced_override,
+)
+search_w_llm_manual = st.sidebar.slider(
+    "LLM judge weight",
+    min_value=0.0, max_value=1.0, value=0.10, step=0.05,
+    key="search_w_llm_manual",
+    disabled=not advanced_override,
+)
+search_w_audience_manual = st.sidebar.slider(
+    "Audience-level weight",
+    min_value=0.0, max_value=1.0, value=0.05, step=0.05,
+    key="search_w_audience_manual",
+    disabled=not advanced_override,
+)
 
-    use_llm_reranker = st.checkbox(
-        "Enable LLM reranker (optional)",
-        value=False,
-        key="search_use_llm_reranker",
-        help="Uses Ollama generation for the last scoring layer. Safe fallback if unavailable.",
-    )
+use_llm_reranker = st.sidebar.checkbox(
+    "Enable LLM reranker (optional)",
+    value=False,
+    key="search_use_llm_reranker",
+    help="Uses Ollama generation for the last scoring layer. Safe fallback if unavailable.",
+)
 
-    search_llm_model = st.text_input(
-        "LLM reranker model",
-        value=st.session_state.get("search_llm_model", "llama3.1:8b"),
-        key="search_llm_model",
-        help="Only used if LLM reranker is enabled.",
-    )
+search_llm_model = st.sidebar.text_input(
+    "LLM reranker model",
+    value=st.session_state.get("search_llm_model", "llama3.1:8b"),
+    key="search_llm_model",
+    help="Only used if LLM reranker is enabled.",
+)
 
-    submitted_search = st.form_submit_button("Search", use_container_width=True)
+submitted_search = st.sidebar.button("Search", key="search_submit_btn", use_container_width=True)
 
 search_w_sem, search_w_bm25, search_w_lex, search_w_llm, search_w_audience, search_prefilter_k = resolve_search_strategy(
     strategy_name,
@@ -971,8 +970,3 @@ if ranked_results:
                         st.write("No summary available.")
 
                 st.divider()
-
-search_mode = st.sidebar.selectbox(
-    "Search Mode",
-    ["Academic (OpenAlex)", "General Knowledge (Wikipedia)"]
-)
