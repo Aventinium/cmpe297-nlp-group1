@@ -80,6 +80,47 @@ def _clamp01(x: float) -> float:
     return max(0.0, min(1.0, float(x)))
 
 
+def _extract_score_from_text(text: str) -> Optional[float]:
+    """
+    Parse a numeric relevance score from free-form model output.
+
+    Handles cases where the model returns additional explanation despite
+    instructions to output only a number.
+    """
+    s = (text or "").strip()
+    if not s:
+        return None
+
+    # Fast path for clean numeric output.
+    try:
+        return _clamp01(float(s))
+    except Exception:
+        pass
+
+    # Fallback: capture numeric substrings (e.g., "0.2\n\nExplanation...").
+    matches = re.findall(r"[-+]?\d*\.?\d+", s)
+    if not matches:
+        return None
+
+    # Prefer a value already in [0,1] if present.
+    for m in matches:
+        try:
+            val = float(m)
+            if 0.0 <= val <= 1.0:
+                return val
+        except Exception:
+            continue
+
+    # Otherwise clamp the first parseable number.
+    for m in matches:
+        try:
+            return _clamp01(float(m))
+        except Exception:
+            continue
+
+    return None
+
+
 # --------------------------------------------------------
 # Text helpers
 # --------------------------------------------------------
@@ -299,9 +340,12 @@ Return ONLY a number between 0.0 and 1.0.
             return 0.0, f"LLM reranker unavailable ({r.status_code}); continuing without it."
         data = r.json()
         text = str(data.get("response", "")).strip()
-        return _clamp01(float(text)), None
+        parsed = _extract_score_from_text(text)
+        if parsed is None:
+            return 0.0, "LLM reranker unavailable (non-numeric model output); continuing without it."
+        return parsed, None
     except Exception as e:
-        return 0.0, f"LLM reranker unavailable ({e}); continuing without it."
+        return 0.0, f"LLM reranker unavailable ({type(e).__name__}); continuing without it."
 
 
 # --------------------------------------------------------
