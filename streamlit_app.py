@@ -401,23 +401,50 @@ search_mode = st.sidebar.selectbox(
 st.session_state.last_search_mode = search_mode
 
 search_query = st.sidebar.text_input(
-    "Search query",
+    "Keywords or phrase",
     key="search_query",
     value=st.session_state.get("search_query", ""),
+    help=(
+        "Use this for focused terms or exact phrases.\n\n"
+        "Best when you already know target concepts.\n\n"
+        "Examples:\n"
+        "- photosynthesis in plants\n"
+        "- CRISPR ethics\n"
+        "- transformer attention\n\n"
+        "Required with Broad topic: fill at least one of the two.\n"
+        "Fallback: if Broad topic is empty, search uses this value."
+    ),
 )
 
 search_topic = st.sidebar.text_input(
-    "Research topic",
+    "Broad topic",
     key="search_topic",
     value=st.session_state.get("search_topic", ""),
+    help=(
+        "Use this for broader subject context when exploring.\n\n"
+        "Examples:\n"
+        "- cell biology\n"
+        "- climate change adaptation\n"
+        "- large language models\n\n"
+        "Required with Keywords: fill at least one of the two.\n"
+        "Fallback: if Keywords is empty, this becomes both the raw search query "
+        "and reranking topic."
+    ),
 )
 
 search_research_question = st.sidebar.text_area(
-    "Research question",
+    "Specific question to answer",
     key="search_research_question",
     value=st.session_state.get("search_research_question", ""),
     height=90,
-    help="What exactly are you trying to learn, compare, explain, or solve?",
+    help=(
+        "Optional but strongly recommended.\n\n"
+        "Use this for the exact question you want answered, compared, or explained.\n"
+        "It improves reranking toward answer usefulness.\n\n"
+        "Examples:\n"
+        "- How does amoeba energy metabolism differ from tree photosynthesis?\n"
+        "- Which methods improve retrieval quality in small RAG datasets?"
+    ),
 )
 
 search_level = st.sidebar.selectbox(
