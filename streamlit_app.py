@@ -638,7 +638,9 @@ if st.session_state.get("search_result_summary"):
 
 ranked_results = st.session_state.get("search_results", [])
 if ranked_results and st.session_state.get("show_search_results", False):
-    with st.sidebar.expander("Candidate sources", expanded=False):
+    # Keep this open by default so checkbox interactions don't feel like the
+    # list "disappeared" on rerun.
+    with st.sidebar.expander("Candidate sources", expanded=True):
         for r in ranked_results:
             key = f"pick_{r.source}_{r.id}"
             year_part = f" ({r.year})" if r.year else ""

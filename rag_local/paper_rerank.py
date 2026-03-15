@@ -97,6 +97,17 @@ def _extract_score_from_text(text: str) -> Optional[float]:
     except Exception:
         pass
 
+    # Handle fraction-style ratings first (e.g., "7/10" -> 0.7).
+    frac = re.search(r"(?<!\d)(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)(?!\d)", s)
+    if frac:
+        try:
+            num = float(frac.group(1))
+            den = float(frac.group(2))
+            if den != 0:
+                return _clamp01(num / den)
+        except Exception:
+            pass
+
     # Fallback: capture numeric substrings (e.g., "0.2\n\nExplanation...").
     matches = re.findall(r"[-+]?\d*\.?\d+", s)
     if not matches:
