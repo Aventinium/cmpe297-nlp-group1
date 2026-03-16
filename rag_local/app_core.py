@@ -417,3 +417,11 @@ def delete_current_corpus(cfg: Cfg) -> bool:
         shutil.rmtree(corpus_root)
         return True
     return False
+
+
+def list_corpora(cfg: Cfg) -> List[str]:
+    base_data_dir = Path(cfg_str(cfg, "data_dir", "rag_local/Data")).resolve()
+    corpora_dir = base_data_dir / "corpora"
+    if not corpora_dir.exists():
+        return []
+    return sorted(p.name for p in corpora_dir.iterdir() if p.is_dir())

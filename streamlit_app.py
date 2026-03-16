@@ -18,6 +18,7 @@ from rag_local.app_core import (
     delete_current_index,
     delete_current_corpus,
     default_corpus_id,
+    list_corpora,
 )
 from rag_local.eval_rag import format_eval_report
 from rag_local.openalex_client import OpenAlexClient
@@ -25,6 +26,8 @@ from rag_local.openalex_fetch import materialize_openalex_selected
 from rag_local.paper_rerank import SearchProfile, rerank_layered
 from rag_local.wiki_client import search_wikipedia
 from rag_local.wiki_fetch import materialize_wikipedia_selected
+
+from rag_local.chat_store import save_chat, load_chat, derive_chat_title, get_chat_dir, list_chats
 
 st.set_page_config(page_title="Local RAG Chatbot", layout="wide")
 SEARCH_STRATEGY_PRESETS = {
@@ -70,7 +73,6 @@ SEARCH_STRATEGY_PRESETS = {
     },
 }
 
-
 def resolve_search_strategy(
     strategy_name: str,
     *,
@@ -110,7 +112,6 @@ def cached_openalex_search(query: str, limit: int, mailto: str):
         open_access_only=True,
     )
 
-
 def _init_state():
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -122,6 +123,9 @@ def _init_state():
         st.session_state.eval_result = None
     if "corpus_id" not in st.session_state:
         st.session_state.corpus_id = default_corpus_id()
+
+    if "chat_id" not in st.session_state:
+        st.session_state.chat_id = st.session_state.corpus_id
 
     if "search_results" not in st.session_state:
         st.session_state.search_results = []
@@ -138,37 +142,104 @@ def _init_state():
     if "last_fetch_skipped" not in st.session_state:
         st.session_state.last_fetch_skipped = []
 
-
 _init_state()
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Corpus")
 
-corpus_id = st.sidebar.text_input(
-    "Corpus ID",
-    value=st.session_state.corpus_id,
-    help="Each corpus has its own docs folder and local index. Use one corpus per chat or topic.",
-)
+_base_data_dir = Path(st.session_state.cfg.get("data_dir", "rag_local/Data")).resolve()
+existing_corpora = list_corpora(st.session_state.cfg)
+
+_saved_chats = {}  # corpus_id -> title
+for _cid in existing_corpora:
+    _root = _base_data_dir / "corpora" / _cid
+    _record = load_chat(_root, _cid)
+    if _record and _record.messages:
+        _saved_chats[_cid] = _record.title
+
+if _saved_chats:
+    # build display labels (title) -> corpus_id lookup
+    _chat_labels = {title: cid for cid, title in _saved_chats.items()}
+
+    _is_new_unsaved = st.session_state.corpus_id not in _saved_chats
+    _current_label = _saved_chats.get(st.session_state.corpus_id, None)
+    _placeholder = "— New chat —"
+    _label_options = ([_placeholder] if _is_new_unsaved else []) + list(_chat_labels.keys())
+
+    selected_label = st.sidebar.selectbox(
+        "Switch chat",
+        options=_label_options,
+        index=0 if _is_new_unsaved else (_label_options.index(_current_label) if _current_label in _label_options else 0),
+        help="Select a saved chat to resume it.",
+    )
+
+    selected_corpus = _chat_labels.get(selected_label, st.session_state.corpus_id)
+
+    _delete_btn_disabled = selected_label == _placeholder
+    if st.sidebar.button("Delete selected chat", key="delete_selected_chat_btn", use_container_width=True, disabled=_delete_btn_disabled):
+        _del_root = _base_data_dir / "corpora" / selected_corpus
+        import shutil as _shutil
+        if _del_root.exists():
+            _shutil.rmtree(_del_root)
+        # if we deleted the active corpus, reset to a new one
+        if selected_corpus == st.session_state.corpus_id:
+            st.session_state.corpus_id = default_corpus_id()
+            st.session_state.chat_id = st.session_state.corpus_id
+            st.session_state.index = None
+            st.session_state.messages = []
+        st.rerun()
+
+    # only switch if the current corpus_id is actually in the existing list (not a brand new one)
+    if selected_corpus != st.session_state.corpus_id and st.session_state.corpus_id in existing_corpora:
+        # save current chat before switching
+        if st.session_state.messages:
+            _cur_root = get_corpus_root(st.session_state.cfg)
+            save_chat(_cur_root, chat_id=st.session_state.chat_id, messages=st.session_state.messages)
+        # switch to selected corpus and load its saved messages
+        st.session_state.corpus_id = selected_corpus
+        st.session_state.chat_id = selected_corpus
+        st.session_state.index = None
+        st.session_state.search_results = []
+        st.session_state.search_selected = {}
+        st.session_state.show_search_results = False
+        st.session_state.last_fetch_saved = []
+        st.session_state.last_fetch_skipped = []
+        _new_root = _base_data_dir / "corpora" / selected_corpus
+        _record = load_chat(_new_root, selected_corpus)
+        st.session_state.messages = _record.messages if _record else []
+        st.rerun()
+
+# corpus_id driven entirely by session state; no text input to avoid overwrite conflicts
+corpus_id = st.session_state.corpus_id
 
 new_corpus_btn = st.sidebar.button("New corpus", use_container_width=True)
 
 if new_corpus_btn:
-    st.session_state.corpus_id = default_corpus_id()
+
+    if st.session_state.messages:
+        _cur_root = get_corpus_root(st.session_state.cfg)
+        save_chat(_cur_root, chat_id=st.session_state.chat_id, messages=st.session_state.messages)
+    _new_id = default_corpus_id()
+    st.session_state.corpus_id = _new_id
+    st.session_state.chat_id = _new_id
+
+    st.session_state.cfg = cfg_with_overrides(st.session_state.cfg, corpus_id=_new_id)
     st.session_state.index = None
     st.session_state.messages = []
+    st.session_state.eval_result = None
     st.session_state.search_results = []
     st.session_state.search_selected = {}
     st.session_state.show_search_results = False
     st.session_state.last_fetch_saved = []
     st.session_state.last_fetch_skipped = []
     st.rerun()
+
 effective_docs_dir = get_corpus_docs_dir(st.session_state.cfg)
 effective_index_path = get_corpus_index_path(st.session_state.cfg)
 
 st.sidebar.caption(f"Docs: {effective_docs_dir}")
 st.sidebar.caption(f"Index: {effective_index_path}")
-# keep current value
-st.session_state.corpus_id = corpus_id.strip() or st.session_state.corpus_id
+
 # -----------------------------
 # Sidebar: settings
 # -----------------------------
@@ -251,14 +322,13 @@ st.sidebar.subheader("Embeddings")
 
 embed_backend = st.sidebar.selectbox(
     "embed_backend",
-    options=["ollama"],
-    index=0,
+    options=["sbert", "ollama"],
+    index=0 if st.session_state.cfg.get("embed_backend", "sbert") == "sbert" else 1,
 )
 embed_model = st.sidebar.text_input(
     "embed_model",
     value=st.session_state.cfg.get("embed_model", "nomic-embed-text"),
 )
-
 
 st.sidebar.markdown("---")
 colA, colB = st.sidebar.columns(2)
@@ -382,7 +452,6 @@ if run_eval_btn:
             st.sidebar.success("Conversation evaluation complete.")
         except Exception as e:
             st.sidebar.error(f"Evaluation failed: {e}")
-
 
 # -----------------------------
 # Sidebar: Search (Academic / Wikipedia / Hybrid)
@@ -841,7 +910,6 @@ if eval_result:
 
         st.code(format_eval_report(eval_result))
 
-
 # Last fetch report
 last_saved = st.session_state.get("last_fetch_saved", [])
 last_skipped = st.session_state.get("last_fetch_skipped", [])
@@ -925,6 +993,9 @@ if prompt:
             "latency_s": round(latency_s, 4),
         }
     )
+
+    _auto_save_root = get_corpus_root(st.session_state.cfg)
+    save_chat(_auto_save_root, chat_id=st.session_state.chat_id, messages=st.session_state.messages)
 
 # Search explanation panel
 ranked_results = st.session_state.get("search_results", [])
