@@ -155,11 +155,13 @@ for _cid in existing_corpora:
     _root = _base_data_dir / "corpora" / _cid
     _record = load_chat(_root, _cid)
     if _record and _record.messages:
-        _saved_chats[_cid] = _record.title
+        _index_exists = (_root / ".index" / "local_index.json").exists()
+        _status = "indexed" if _index_exists else "no index"
+        _saved_chats[_cid] = f"{_record.title} - {_status}"
 
 if _saved_chats:
-    # build display labels (title) -> corpus_id lookup
-    _chat_labels = {title: cid for cid, title in _saved_chats.items()}
+    # build display labels (label with status) -> corpus_id lookup
+    _chat_labels = {label: cid for cid, label in _saved_chats.items()}
 
     _is_new_unsaved = st.session_state.corpus_id not in _saved_chats
     _current_label = _saved_chats.get(st.session_state.corpus_id, None)
@@ -181,7 +183,6 @@ if _saved_chats:
         import shutil as _shutil
         if _del_root.exists():
             _shutil.rmtree(_del_root)
-        # if we deleted the active corpus, reset to a new one
         if selected_corpus == st.session_state.corpus_id:
             st.session_state.corpus_id = default_corpus_id()
             st.session_state.chat_id = st.session_state.corpus_id
@@ -189,16 +190,25 @@ if _saved_chats:
             st.session_state.messages = []
         st.rerun()
 
+    # rename chat section
+    if selected_label != _placeholder:
+        _current_title = _saved_chats.get(selected_corpus, "").rsplit(" - ", 1)[0]
+        _rename_input = st.sidebar.text_input("Rename chat", value=_current_title, key="rename_input")
+        if st.sidebar.button("Save name", key="save_name_btn", use_container_width=True):
+            _rename_root = _base_data_dir / "corpora" / selected_corpus
+            _rename_record = load_chat(_rename_root, selected_corpus)
+            if _rename_record:
+                save_chat(_rename_root, chat_id=selected_corpus, messages=_rename_record.messages, title=_rename_input.strip())
+            st.rerun()
+
     # only switch if the current corpus_id is actually in the existing list (not a brand new one)
     if selected_corpus != st.session_state.corpus_id and st.session_state.corpus_id in existing_corpora:
-        # save current chat before switching
         if st.session_state.messages:
             _cur_root = get_corpus_root(st.session_state.cfg)
             save_chat(_cur_root, chat_id=st.session_state.chat_id, messages=st.session_state.messages)
-        # switch to selected corpus and load its saved messages
         st.session_state.corpus_id = selected_corpus
         st.session_state.chat_id = selected_corpus
-        st.session_state.index = None
+        st.session_state.cfg = cfg_with_overrides(st.session_state.cfg, corpus_id=selected_corpus)
         st.session_state.search_results = []
         st.session_state.search_selected = {}
         st.session_state.show_search_results = False
@@ -207,6 +217,13 @@ if _saved_chats:
         _new_root = _base_data_dir / "corpora" / selected_corpus
         _record = load_chat(_new_root, selected_corpus)
         st.session_state.messages = _record.messages if _record else []
+        # auto-load index for the switched corpus if it exists
+        try:
+            _switched_cfg = cfg_with_overrides(st.session_state.cfg, corpus_id=selected_corpus)
+            _idx, _meta = init_index(_switched_cfg, force_rebuild=False)
+            st.session_state.index = _idx
+        except Exception:
+            st.session_state.index = None
         st.rerun()
 
 # corpus_id driven entirely by session state; no text input to avoid overwrite conflicts
@@ -322,12 +339,13 @@ st.sidebar.subheader("Embeddings")
 
 embed_backend = st.sidebar.selectbox(
     "embed_backend",
-    options=["sbert", "ollama"],
-    index=0 if st.session_state.cfg.get("embed_backend", "sbert") == "sbert" else 1,
+    options=["ollama", "sbert"],
+    index=0 if st.session_state.cfg.get("embed_backend", "ollama") == "ollama" else 1,
 )
 embed_model = st.sidebar.text_input(
     "embed_model",
     value=st.session_state.cfg.get("embed_model", "nomic-embed-text"),
+    key=f"embed_model_input_{st.session_state.corpus_id}",
 )
 
 st.sidebar.markdown("---")
