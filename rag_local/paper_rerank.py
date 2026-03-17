@@ -559,8 +559,8 @@ def rerank_layered(
 
     llm_scores: List[float] = []
     llm_warning_emitted = False
-    for c in pool:
-        if use_llm_reranker and delta_llm > 0:
+    if use_llm_reranker and delta_llm > 0:
+        for c in pool:
             score, warn = llm_relevance_score_safe(
                 query=query_text,
                 title=str(c.get("title") or ""),
@@ -575,8 +575,9 @@ def rerank_layered(
             if warn and not llm_warning_emitted:
                 warnings.append(warn)
                 llm_warning_emitted = True
-        else:
-            llm_scores.append(0.0)
+    else:
+        llm_scores: List[float] = [0.0 for c in pool]
+        delta_llm = 0
 
     sem_norm = [0.5 * (s + 1.0) for s in semantic_scores]
     lex_scores = [float(c.get("_lexical_score", 0.0)) for c in pool]

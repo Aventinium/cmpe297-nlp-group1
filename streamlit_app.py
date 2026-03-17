@@ -174,13 +174,22 @@ st.session_state.corpus_id = corpus_id.strip() or st.session_state.corpus_id
 # -----------------------------
 st.sidebar.title("Settings")
 
+modify_ollama_settings = st.sidebar.checkbox(
+    "Modify Ollama Model Settings",
+    value=False,
+    key="modify_ollama_settings",
+    help="Enable Ollama setting controls",
+)
+
 ollama_host = st.sidebar.text_input(
     "Ollama host",
     value=st.session_state.cfg.get("ollama_host", "http://localhost:11434"),
+    disabled=not modify_ollama_settings
 )
 chat_model = st.sidebar.text_input(
     "Chat model",
     value=st.session_state.cfg.get("chat_model", st.session_state.cfg.get("model", "llama3.1:8b")),
+    disabled=not modify_ollama_settings
 )
 system_prompt = st.sidebar.text_area(
     "System prompt",
@@ -198,6 +207,7 @@ Core behavior:
 Be strict about citations when RAG is enabled."""
     ),
     height=140,
+    disabled=not modify_ollama_settings
 )
 
 st.sidebar.markdown("---")
@@ -486,64 +496,66 @@ strategy_name = st.sidebar.selectbox(
     help="Recommended preset for layered reranking. Use Advanced controls only if you want manual tuning.",
 )
 
-advanced_override = st.sidebar.checkbox(
-    "Advanced controls",
-    value=False,
-    key="advanced_override",
-    help="Enable manual reranking controls.",
-)
+with st.sidebar.expander("Advanced weight controls", expanded=False):
 
-# Manual defaults
-search_prefilter_k_manual = st.sidebar.slider(
-    "Lexical prefilter keep",
-    5, 100, 25, step=5, key="search_prefilter_k_manual",
-    disabled=not advanced_override,
-)
+    advanced_override = st.checkbox(
+        "Advanced controls",
+        value=False,
+        key="advanced_override",
+        help="Enable manual reranking controls.",
+    )
 
-search_w_sem_manual = st.sidebar.slider(
-    "Semantic weight",
-    min_value=0.0, max_value=1.0, value=0.50, step=0.05,
-    key="search_w_sem_manual",
-    disabled=not advanced_override,
-)
-search_w_bm25_manual = st.sidebar.slider(
-    "BM25 weight",
-    min_value=0.0, max_value=1.0, value=0.20, step=0.05,
-    key="search_w_bm25_manual",
-    disabled=not advanced_override,
-)
-search_w_lex_manual = st.sidebar.slider(
-    "Lexical intent weight",
-    min_value=0.0, max_value=1.0, value=0.15, step=0.05,
-    key="search_w_lex_manual",
-    disabled=not advanced_override,
-)
-search_w_llm_manual = st.sidebar.slider(
-    "LLM judge weight",
-    min_value=0.0, max_value=1.0, value=0.10, step=0.05,
-    key="search_w_llm_manual",
-    disabled=not advanced_override,
-)
-search_w_audience_manual = st.sidebar.slider(
-    "Audience-level weight",
-    min_value=0.0, max_value=1.0, value=0.05, step=0.05,
-    key="search_w_audience_manual",
-    disabled=not advanced_override,
-)
+    # Manual defaults
+    search_prefilter_k_manual = st.slider(
+        "Lexical prefilter keep",
+        5, 100, 25, step=5, key="search_prefilter_k_manual",
+        disabled=not advanced_override,
+    )
 
-use_llm_reranker = st.sidebar.checkbox(
-    "Enable LLM reranker (optional)",
-    value=False,
-    key="search_use_llm_reranker",
-    help="Uses Ollama generation for the last scoring layer. Safe fallback if unavailable.",
-)
+    search_w_sem_manual = st.slider(
+        "Semantic weight",
+        min_value=0.0, max_value=1.0, value=0.50, step=0.05,
+        key="search_w_sem_manual",
+        disabled=not advanced_override,
+    )
+    search_w_bm25_manual = st.slider(
+        "BM25 weight",
+        min_value=0.0, max_value=1.0, value=0.20, step=0.05,
+        key="search_w_bm25_manual",
+        disabled=not advanced_override,
+    )
+    search_w_lex_manual = st.slider(
+        "Lexical intent weight",
+        min_value=0.0, max_value=1.0, value=0.15, step=0.05,
+        key="search_w_lex_manual",
+        disabled=not advanced_override,
+    )
+    search_w_llm_manual = st.slider(
+        "LLM judge weight",
+        min_value=0.0, max_value=1.0, value=0.10, step=0.05,
+        key="search_w_llm_manual",
+        disabled=not advanced_override,
+    )
+    search_w_audience_manual = st.slider(
+        "Audience-level weight",
+        min_value=0.0, max_value=1.0, value=0.05, step=0.05,
+        key="search_w_audience_manual",
+        disabled=not advanced_override,
+    )
 
-search_llm_model = st.sidebar.text_input(
-    "LLM reranker model",
-    value=st.session_state.get("search_llm_model", "llama3.1:8b"),
-    key="search_llm_model",
-    help="Only used if LLM reranker is enabled.",
-)
+    use_llm_reranker = st.checkbox(
+        "Enable LLM reranker (optional)",
+        value=False,
+        key="search_use_llm_reranker",
+        help="Uses Ollama generation for the last scoring layer. Safe fallback if unavailable.",
+    )
+
+    search_llm_model = st.text_input(
+        "LLM reranker model",
+        value=st.session_state.get("search_llm_model", "llama3.1:8b"),
+        key="search_llm_model",
+        help="Only used if LLM reranker is enabled.",
+    )
 
 submitted_search = st.sidebar.button("Search", key="search_submit_btn", use_container_width=True)
 
